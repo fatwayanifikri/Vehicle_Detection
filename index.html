@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Vehicle Detection and Counting with Js</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+            }
+            .container {
+                margin: 50px;
+            }
+            .upload-section {
+                margin-bottom: 20px;
+            }
+            canvas {
+                position: absolute;
+                top: 0;
+                left: 0;
+                pointer-events: none; /* Ensures canvas doesn't interfere with video controls */
+            }
+            #videoWrapper {
+                position: relative;
+                display: inline-block;
+                width: 1000px;
+                height: 500px;
+            }
+            video {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Vehicle Detection and Counting</h2>
+            <div class="upload-section">
+                <label for="videoUpload">Upload Video:</label>
+                <input type="file" id="videoUpload" accept="video/*">
+            </div>
+            <div id="videoWrapper">
+                <video id="videoPlayer" controls></video>
+                <canvas id="overlay"></canvas>
+            </div>
+            <p id="objectCount">Vehicle Count: 0</p>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.21.0/dist/tf.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+        <script>
+            let videoPlayer = document.getElementById('videoPlayer');
+            let canvas = document.getElementById('overlay');
+            let context = canvas.getContext('2d');
+            let objectCount = 0;
+            let model;
+
+            async function loadModel() {
+                model = await cocoSsd.load();
+                console.log('COCO-SSD model loaded');
+            }
+            loadModel();
+
+            // Listen for video upload and play the video
+            document.getElementById('videoUpload').addEventListener('change', function (event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const videoURL = URL.createObjectURL(file);
+                    videoPlayer.src = videoURL;
+                    // videoPlayer.play();
+                    
+                    // Set canvas dimensions to match the static video size
+                    canvas.width = 1000;
+                    canvas.height = 500;
+                    videoPlayer.addEventListener('play', () => {
+                        detectFrame();
+                    });
+                }
+            });
+
+            // Function to run detection on each frame
+            function detectFrame() {
+                if (videoPlayer.paused || videoPlayer.ended) {
+                    return; 
+                }
+                model.detect(videoPlayer).then(predictions => {
+                    drawPredictions(predictions);
+                    requestAnimationFrame(detectFrame);
+                }).catch(error => {
+                    console.error('Detection error:', error);
+                });
+            }
+
+            // Function to draw predictions and count vehicles
+            function drawPredictions(predictions) {
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                objectCount = 0;
+                predictions.forEach(prediction => {
+                    const vehicleTypes = ['car', 'truck', 'bus', 'train', 'bicycle', 'motorcycle', 'ship', 'plane'];
+                    if (vehicleTypes.includes(prediction.class)) {
+                        context.beginPath();
+                        context.strokeStyle = 'green';
+                        context.lineWidth = 4;
+                        const [x, y, width, height] = prediction.bbox;
+                        context.rect(x * (1000 / videoPlayer.videoWidth), y * (500 / videoPlayer.videoHeight), 
+                                    width * (1000 / videoPlayer.videoWidth), height * (500 / videoPlayer.videoHeight));
+                        context.stroke();
+                        // Draw label background
+                        context.fillStyle = 'green';
+                        context.fillRect(x * (1000 / videoPlayer.videoWidth), 
+                                        y * (500 / videoPlayer.videoHeight) > 30 ? 
+                                        y * (500 / videoPlayer.videoHeight) - 30 : 0, 
+                                        width * (1000 / videoPlayer.videoWidth), 30);
+                        // Add text
+                        context.fillStyle = 'white';
+                        context.font = 'bold 15px Arial';
+                        context.fillText(prediction.class.toUpperCase(), 
+                                        x * (1000 / videoPlayer.videoWidth) + 5, 
+                                        y * (500 / videoPlayer.videoHeight) > 30 ? 
+                                        y * (500 / videoPlayer.videoHeight) - 10 : 20);
+                        objectCount++;
+                    }
+                });
+                document.getElementById('objectCount').textContent = 'Vehicle Count: ' + objectCount;
+            }
+        </script>
+    </body>
+</html>
